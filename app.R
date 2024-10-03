@@ -24,7 +24,10 @@ ui <- page_sidebar(
     downloadButton("download_data", "Download Data as CSV", class = "btn-success mt-3"),
     hr(),
     h4("Shapefile Creation"),
-    textInput("shapefile_name", "Enter shapefile name:", value = "my_points"),
+    textInput("shapefile_name", "Enter shapefile name:", value = "my_shapefile"),
+    selectInput("shapefile_type", "Select shapefile type:",
+                choices = c("Point" = "point", "Line" = "line", "Polygon" = "polygon"),
+                selected = "point"),
     downloadButton("download_shapefile", "Download Shapefile", class = "btn-info mt-3")
   ),
   leafletOutput("map")
@@ -150,15 +153,28 @@ server <- function(input, output, session) {
       paste0(input$shapefile_name, ".zip")
     },
     content = function(file) {
-      # Create a temporary directory
+      req(nrow(points()) > 0)
+
       tmp_dir <- tempdir()
 
       # Convert points to sf object
       sf_points <- st_as_sf(points(), coords = c("Longitude", "Latitude"), crs = 4326)
 
-      # Save as shapefile directly in the tmp_dir
+      # Create geometry based on selected type
+      sf_geometry <- switch(input$shapefile_type,
+                            "point" = sf_points,
+                            "line" = st_cast(st_combine(sf_points), "LINESTRING"),
+                            "polygon" = st_cast(st_combine(sf_points), "POLYGON")
+      )
+
+      # If line or polygon, we need to put it into a data frame
+      if (input$shapefile_type != "point") {
+        sf_geometry <- st_sf(geometry = sf_geometry)
+      }
+
+      # Save as shapefile
       shapefile_name <- input$shapefile_name
-      st_write(sf_points, dsn = tmp_dir, layer = shapefile_name, driver = "ESRI Shapefile", quiet = TRUE)
+      st_write(sf_geometry, dsn = tmp_dir, layer = shapefile_name, driver = "ESRI Shapefile", quiet = TRUE)
 
       # List all files related to this shapefile
       shapefile_files <- list.files(tmp_dir, pattern = paste0("^", shapefile_name, "\\.(shp|shx|dbf|prj)$"), full.names = TRUE)
@@ -174,6 +190,8 @@ server <- function(input, output, session) {
     },
     contentType = "application/zip"
   )
+
+  session$onSessionEnded(stopApp)
 }
 
 shinyApp(ui, server)
