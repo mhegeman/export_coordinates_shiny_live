@@ -8,7 +8,7 @@ ui <- page_sidebar(
   sidebar = sidebar(
     width = 600,
     h4("Map Controls"),
-    checkboxInput("toggle_shellfish", "Show Shellfish Layer", value = TRUE),
+    checkboxInput("toggle_shellfish", "Show Shellfish Layer", value = FALSE),
     checkboxInput("toggle_pin_dropping", "Enable Pin Dropping", value = FALSE),
     hr(),
     h4("Pin Information"),
