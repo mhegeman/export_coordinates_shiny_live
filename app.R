@@ -3,6 +3,7 @@ library(leaflet)
 library(leaflet.esri)
 library(bslib)
 library(tidyverse)
+library(sf)
 
 ui <- page_sidebar(
   title = "Interactive Map Coordinate Finder",
@@ -20,13 +21,17 @@ ui <- page_sidebar(
     textInput("point_description", "Enter description for the last point:"),
     actionButton("add_description", "Add Description", class = "btn-primary mt-2"),
     actionButton("clear_points", "Clear All Points", class = "btn-danger mt-3"),
-    downloadButton("download_data", "Download Data as CSV", class = "btn-success mt-3")
+    downloadButton("download_data", "Download Data as CSV", class = "btn-success mt-3"),
+    hr(),
+    h4("Shapefile Creation"),
+    textInput("shapefile_name", "Enter shapefile name:", value = "my_points"),
+    downloadButton("download_shapefile", "Download Shapefile", class = "btn-info mt-3")
   ),
   leafletOutput("map")
 )
 
 server <- function(input, output, session) {
-  points <- reactiveVal(data.frame(Number = integer(), Latitude = numeric(), Longitude = numeric(), Description = character()))
+  points <- reactiveVal(tibble(Number = integer(), Latitude = numeric(), Longitude = numeric(), Description = character()))
   custom_feature_url <- reactiveVal(NULL)
 
   map_data <- reactiveVal(list(
@@ -138,6 +143,36 @@ server <- function(input, output, session) {
     content = function(file) {
       write_csv(points(), file)
     }
+  )
+
+  output$download_shapefile <- downloadHandler(
+    filename = function() {
+      paste0(input$shapefile_name, ".zip")
+    },
+    content = function(file) {
+      # Create a temporary directory
+      tmp_dir <- tempdir()
+
+      # Convert points to sf object
+      sf_points <- st_as_sf(points(), coords = c("Longitude", "Latitude"), crs = 4326)
+
+      # Save as shapefile directly in the tmp_dir
+      shapefile_name <- input$shapefile_name
+      st_write(sf_points, dsn = tmp_dir, layer = shapefile_name, driver = "ESRI Shapefile", quiet = TRUE)
+
+      # List all files related to this shapefile
+      shapefile_files <- list.files(tmp_dir, pattern = paste0("^", shapefile_name, "\\.(shp|shx|dbf|prj)$"), full.names = TRUE)
+
+      # Create the zip file, changing the working directory temporarily
+      current_wd <- getwd()
+      setwd(tmp_dir)
+      zip(file, files = basename(shapefile_files))
+      setwd(current_wd)
+
+      # Clean up: remove the shapefile components from the temp directory
+      file.remove(shapefile_files)
+    },
+    contentType = "application/zip"
   )
 }
 
